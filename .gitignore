@@ -2,3 +2,5 @@
 /main.o
 /nn
 /nn.o
+.vscode
+*.o

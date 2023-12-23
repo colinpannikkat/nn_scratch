@@ -34,13 +34,29 @@ public:
     Scalar activationFunctionDerivative(Scalar x);
 
     struct Layer {
-        std::vector <vec *> weights;
-        vec* gradients;
-        vec* values;
+        struct Node {
+            vec weights;
+            vec gradients;
+            Scalar value;
+
+            Node();
+            Node(int next_num_nodes);
+            ~Node();
+
+            void clear_gradients();
+        };
+        struct BiasNode : public Node {
+            BiasNode(int next_num_nodes);
+            ~BiasNode();
+        };
+        std::vector <Node *> nodes;
         int num_nodes, next_num_nodes;
 
-        Layer(int num_nodes, int num_weights);
+        Layer();
+        Layer(int num_nodes, int next_num_nodes);
         ~Layer();
+
+        void clear_gradients();
 
         void print_weights();
         void print_gradients();

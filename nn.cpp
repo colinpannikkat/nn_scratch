@@ -12,10 +12,8 @@ NN::NN(std::vector<uint>topology, Scalar learning_rate) {
         // initialize neuron layers, add bias node to every layer but output
         if (i == topology.size() - 1) // if last node
             layers.push_back(new Layer(topology[i], 0));
-        else if (i == 0) // if first node
-            layers.push_back(new Layer(topology[i], topology[i + 1]));
         else
-            layers.push_back(new Layer(topology[i] + 1, topology[i + 1]));
+            layers.push_back(new Layer(topology[i], topology[i + 1]));
     }
 
     return;
@@ -33,11 +31,13 @@ NN::~NN() {
 void NN::forward(vec input) {
 
     /* Set first layer to input */
-    layers[0]->values = &input;
+    for (int i = 0; i < layers[0]->num_nodes; i++) {
+        layers[0]->nodes[i]->value = input[i];
+    }
 
     for (int i = 1; i < layers.size(); i++) {
         for (int j = 0; j < layers[i]->num_nodes; j++) {  
-            layers[i]->values->operator[](j) = dot_product(*layers[i - 1]->values, *layers[i - 1]->weights[j]);
+            layers[i]->values->operator[](j) = dot_product(layers[i - 1]->nodes[i]->value, layers[i - 1]->nodes[j]->weights);
         }
     }
     layers[2]->print_values();
@@ -55,14 +55,11 @@ void NN::backprop(Scalar output) {
 
 void NN::loss(Scalar output) {
 
-    layers[topology.size() - 1]->gradients->back() = output - layers[topology.size() - 1]->values->back();
-
-    for (int i = layers.size() - 2; i > 0; i--) {
-        for (int j = 0; j < layers[i]->num_nodes; j++) {
-            for (int k = 0; k < layers[i]->gradients->size(); k++) {
-                layers[i]->gradients->operator[](0) = layers[i + 1]->gradients->operator[](0) * layers[i]->weights[j]->operator[](k);
-            }
-        }
+    // Get last layer, and calculate loss
+    Layer *last_layer = layers[topology.size() - 1];
+    last_layer->clear_gradients();
+    for (int i = 0; i < last_layer->num_nodes; i++) {
+        last_layer->nodes[i]->gradients.back() = output - last_layer->nodes.back()->value;
     }
     
 
@@ -71,13 +68,13 @@ void NN::loss(Scalar output) {
 
 void NN::updateWeights() {
 
-    for (int i = 1; i < layers.size(); i++) {
-        for (int j = 0; j < layers[i]->num_nodes; j++) {  
-            for (int k = 0; k < layers[i]->weights[j]->size(); k++) {
-                layers[i]->weights[j]->operator[](k) = layers[i]->weights[j]->operator[](k) * learning_rate * activationFunctionDerivative(layers[i]->weights[j+1]->operator[](k)) * 1;
-            }
-        }
-    }
+    // for (int i = 1; i < layers.size(); i++) {
+    //     for (int j = 0; j < layers[i]->num_nodes; j++) {  
+    //         for (int k = 0; k < layers[i]->weights[j]->size(); k++) {
+    //             layers[i]->weights[j]->operator[](k) = layers[i]->weights[j]->operator[](k) * learning_rate * activationFunctionDerivative(layers[i]->weights[j+1]->operator[](k)) * 1;
+    //         }
+    //     }
+    // }
 
     return;
 }
@@ -114,14 +111,41 @@ Scalar NN::dot_product(vec a, vec b) {
 }
 
 
-Scalar NN::activationFunction(Scalar x)
-{
-    return std::tanhf(x);
-}
+Scalar NN::activationFunction(Scalar x) { return std::tanhf(x); }
  
-Scalar NN::activationFunctionDerivative(Scalar x)
-{
-    return 1 - std::tanhf(x) * std::tanhf(x);
+Scalar NN::activationFunctionDerivative(Scalar x) { return 1 - std::tanhf(x) * std::tanhf(x); }
+
+NN::Layer::Node::Node() {
+
+}
+
+NN::Layer::Node::Node(int next_num_nodes) {
+    // initialize with random weights
+    for (int i = 0; i < next_num_nodes; i++) {
+        weights.push_back((float)rand() / RAND_MAX);
+    }
+}
+
+NN::Layer::Node::~Node() {
+    
+}
+
+void NN::Layer::Node::clear_gradients() {
+    gradients.clear();
+}
+
+NN::Layer::BiasNode::BiasNode(int next_num_nodes) {
+    this->value = 1;
+    for (int i = 0; i < next_num_nodes; i++)
+        weights.push_back(1);
+}
+
+NN::Layer::BiasNode::~BiasNode() {
+    
+}
+/* Default constructor for Layer */
+NN::Layer::Layer() {
+
 }
 
 /* Constructor for Layer */
@@ -129,54 +153,48 @@ NN::Layer::Layer(int num_nodes, int next_num_nodes) {
     this->num_nodes = num_nodes;
     this->next_num_nodes = next_num_nodes;
 
-    // initialize with random weights
-    for (int i = 0; i < num_nodes; i++) {
-        weights.push_back(new vec(next_num_nodes, (float)rand() / RAND_MAX));
+    // create nodes
+    for (int i = 0; i < num_nodes - 1; i++) {
+        nodes.push_back(new Node(next_num_nodes));
     }
-    weights.push_back(new vec(next_num_nodes, 1));
-    gradients = new vec(num_nodes);
-
-    // if not one node/output node, add a bias node
-    if (num_nodes - 1 != 0) {
-        values = new vec(num_nodes - 1);
-        values->push_back((Scalar)1); // bias node
-    } else {
-        values = new vec(num_nodes);
+    // if not output node, add bias node
+    if (next_num_nodes != 0) {
+        nodes.push_back(new BiasNode(next_num_nodes));
     }
 }
 /* Destructor for Layer */
 NN::Layer::~Layer() {
-    for (int i = 0; i < weights.size(); i++) {
-        if (weights[i] != nullptr) {
-            delete weights[i];
-            weights[i] = nullptr;
-        }
-    }
-    if (gradients != nullptr) {
-        delete gradients;
-    }
-    if (values != nullptr) {
-        delete values;
+    
+}
+
+void NN::Layer::clear_gradients() {
+    for (int i = 0; i < num_nodes; i++) {
+        nodes[i]->clear_gradients();
     }
 }
 
 /* Output the weights of the layer */
 void NN::Layer::print_weights() {
-    for (int i = 0; i < weights.size(); i++) {
+    for (int i = 0; i < nodes.size(); i++) {
         std::cout << "Node " << i + 1 << ": ";
-        for (int j = 0; j < weights[i]->size(); j++) {
-            std::cout << weights[i]->at(j) << " ";
+        for (int j = 0; j < nodes[i]->weights.size(); j++) {
+            std::cout << nodes[i]->weights.at(j) << " ";
         }
         std::cout << std::endl;
     }
 }
 /* Output the gradients of the layer */
 void NN::Layer::print_gradients() {
-    for (int i = 0; i < gradients->size(); i++)
-            print(gradients->at(i));
+    for (int i = 0; i < nodes.size(); i++) {
+        std::cout << "Node " << i + 1 << ": ";
+        for (int j = 0; j < nodes[i]->gradients.size(); j++) {
+            std::cout << nodes[i]->gradients.at(j) << " ";
+        }
+        std::cout << std::endl;
+    }
 }
 /* Output the current values of the layer */
 void NN::Layer::print_values() {
-    for (int i = 0; i < values->size(); i++)
-            print(values->at(i));
+    for (int i = 0; i < nodes.size(); i++)
+            print(nodes[i]->value);
 }
