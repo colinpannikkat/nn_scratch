@@ -29,6 +29,8 @@ NN::~NN() {
 }
 
 void NN::forward(vec input) {
+    vec values;
+    std::vector <vec> weights;
 
     /* Set first layer to input */
     for (int i = 0; i < layers[0]->num_nodes; i++) {
@@ -36,11 +38,19 @@ void NN::forward(vec input) {
     }
 
     for (int i = 1; i < layers.size(); i++) {
-        for (int j = 0; j < layers[i]->num_nodes; j++) {  
-            layers[i]->values->operator[](j) = dot_product(layers[i - 1]->nodes[i]->value, layers[i - 1]->nodes[j]->weights);
+        // Get weight and value vector from previous node
+        for (int j = 0; j < layers[i]->num_nodes; j++) {
+            values.push_back(layers[i - 1]->nodes[j]->value);
+            weights.push_back(layers[i - 1]->nodes[j]->weights);
         }
+        // Dot product between weight and value vector to get new value
+        for (int j = 0; j < layers[i]->num_nodes; j++) {
+            layers[i]->nodes[j]->value = dot_product(values, weights[j]);
+            print(dot_product(values, weights[j]));
+        }
+        values.clear();
+        weights.clear();
     }
-    layers[2]->print_values();
 
     return;
 }
@@ -58,8 +68,14 @@ void NN::loss(Scalar output) {
     // Get last layer, and calculate loss
     Layer *last_layer = layers[topology.size() - 1];
     last_layer->clear_gradients();
+
     for (int i = 0; i < last_layer->num_nodes; i++) {
-        last_layer->nodes[i]->gradients.back() = output - last_layer->nodes.back()->value;
+        last_layer->nodes[i]->gradients.push_back(output - last_layer->nodes.back()->value);
+    }
+
+    for (int i = topology.size() - 2; i > 0; i--) {
+
+        layers[i]->nodes[i]->gradients.push_back(output - last_layer->nodes.back()->value);
     }
     
 
@@ -68,14 +84,15 @@ void NN::loss(Scalar output) {
 
 void NN::updateWeights() {
 
-    // for (int i = 1; i < layers.size(); i++) {
-    //     for (int j = 0; j < layers[i]->num_nodes; j++) {  
-    //         for (int k = 0; k < layers[i]->weights[j]->size(); k++) {
-    //             layers[i]->weights[j]->operator[](k) = layers[i]->weights[j]->operator[](k) * learning_rate * activationFunctionDerivative(layers[i]->weights[j+1]->operator[](k)) * 1;
-    //         }
-    //     }
-    // }
-
+    /* To update the weights we must multiply the weight by the LR, gradient, and partial derivative of loss */
+    for (int i = 0; i < layers.size(); i++) {
+        for (int j = 0; j < layers[i]->nodes.size(); j++) {
+            Layer::Node *curr = layers[i]->nodes[j];
+            for (int k = 0; k < curr->weights.size(); k++) {
+                curr->weights[k] = curr->weights[k] * curr->gradients[k] * learning_rate;
+            }
+        }
+    }
     return;
 }
 
@@ -87,7 +104,11 @@ void NN::train(std::vector <vec> input, vec output) {
         forward(input[i]);
         print("Backprop");
         backprop(output[i]);
+        std::cout << "Actual output: ";
+        layers[topology.size() - 1]->print_values();
+        std::cout << "Expected output: " << output[i] << std::endl;
     }
+
 
     return;
 }
@@ -131,7 +152,8 @@ NN::Layer::Node::~Node() {
 }
 
 void NN::Layer::Node::clear_gradients() {
-    gradients.clear();
+    if (gradients.size() > 0)
+        gradients.clear();
 }
 
 NN::Layer::BiasNode::BiasNode(int next_num_nodes) {
@@ -154,12 +176,12 @@ NN::Layer::Layer(int num_nodes, int next_num_nodes) {
     this->next_num_nodes = next_num_nodes;
 
     // create nodes
-    for (int i = 0; i < num_nodes - 1; i++) {
+    for (int i = 0; i < num_nodes; i++) {
         nodes.push_back(new Node(next_num_nodes));
-    }
-    // if not output node, add bias node
-    if (next_num_nodes != 0) {
-        nodes.push_back(new BiasNode(next_num_nodes));
+        // if not output node, add bias node
+        if (next_num_nodes != 0) {
+            nodes.push_back(new BiasNode(next_num_nodes));
+        }
     }
 }
 /* Destructor for Layer */
@@ -196,5 +218,5 @@ void NN::Layer::print_gradients() {
 /* Output the current values of the layer */
 void NN::Layer::print_values() {
     for (int i = 0; i < nodes.size(); i++)
-            print(nodes[i]->value);
+        print(nodes[i]->value);
 }

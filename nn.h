@@ -2,6 +2,7 @@
 #define NN_H
 #include <iostream>
 #include <vector>
+#include <cmath>
 
 /* Implementation of a simple neural network to play the Wumpus game */
 /* Some code based off of: https://www.geeksforgeeks.org/ml-neural-network-implementation-in-c-from-scratch/ */
